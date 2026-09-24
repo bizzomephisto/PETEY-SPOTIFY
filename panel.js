@@ -23,6 +23,38 @@
     target.dataset.type = type;
   }
 
+  const djPersonaFields = [1, 2, 3].map(slot => ({
+    id: String(slot),
+    name: id(`dj-name-${slot}`),
+    prompt: id(`dj-prompt-${slot}`),
+  }));
+
+  function updateDjPersonaOptions(selected) {
+    const select = id('dj-active-persona');
+    const current = String(selected || select.value || '1');
+    select.textContent = '';
+    djPersonaFields.forEach((field, index) => {
+      const option = document.createElement('option');
+      option.value = field.id;
+      option.textContent = field.name.value.trim() || `DJ Persona ${index + 1}`;
+      select.append(option);
+    });
+    select.value = djPersonaFields.some(field => field.id === current) ? current : '1';
+  }
+
+  function renderDjSettings(status) {
+    const personas = Array.isArray(status.dj_personas) ? status.dj_personas : [];
+    djPersonaFields.forEach((field, index) => {
+      const persona = personas[index] || {};
+      field.name.value = persona.name || `DJ Persona ${index + 1}`;
+      field.prompt.value = persona.prompt || (index === 0 ? status.dj_prompt || '' : '');
+    });
+    updateDjPersonaOptions(status.active_dj_persona || '1');
+    id('dj-mode').checked = Boolean(status.dj_mode);
+    id('dj-mix-profile').checked = Boolean(status.mix_dj_with_profile);
+    id('dj-post-album-art').checked = status.post_album_art !== false;
+  }
+
   function formatDuration(ms) {
     const min = Math.floor(ms / 60000);
     const sec = Math.floor((ms % 60000) / 1000);
@@ -125,8 +157,7 @@
       const status = await api('/status');
       const clientId = id('client-id');
       if (clientId && status.client_id) clientId.value = status.client_id;
-      id('dj-mode').checked = Boolean(status.dj_mode);
-      id('dj-prompt').value = status.dj_prompt || '';
+      renderDjSettings(status);
       id('duck-music').checked = Boolean(status.duck_music);
       id('duck-volume').value = Number(status.duck_volume ?? 18);
       id('fade-duration').value = Number(status.fade_duration_ms ?? 700);
@@ -180,15 +211,25 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled: id('dj-mode').checked,
-          prompt: id('dj-prompt').value,
+          personas: djPersonaFields.map(field => ({
+            id: field.id,
+            name: field.name.value,
+            prompt: field.prompt.value,
+          })),
+          active_persona: id('dj-active-persona').value,
+          mix_with_profile: id('dj-mix-profile').checked,
+          post_album_art: id('dj-post-album-art').checked,
         }),
       });
-      id('dj-mode').checked = Boolean(status.dj_mode);
-      id('dj-prompt').value = status.dj_prompt || '';
+      renderDjSettings(status);
       setSectionStatus('dj', 'DJ Mode saved.', 'success');
     } catch (error) {
       setSectionStatus('dj', error.message, 'error');
     }
+  });
+
+  djPersonaFields.forEach(field => {
+    field.name.addEventListener('input', () => updateDjPersonaOptions());
   });
 
   id('save-ducking').addEventListener('click', async () => {

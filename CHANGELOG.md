@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.0 — 2026-09-24
+
+- Save and name three independent DJ personas and choose the active persona.
+- Optionally blend the active DJ persona with the current PETEY system profile.
+- Add an independent toggle for posting upcoming album artwork to chat.
+- Preserve existing single-prompt configurations as the first DJ persona.
+
 ## v0.4.2 — 2026-09-23
 
 - Keep DJ Mode and music-fading save confirmations inside their own settings cards.

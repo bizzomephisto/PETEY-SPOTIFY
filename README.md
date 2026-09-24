@@ -2,7 +2,7 @@
 
 Search and play songs on Spotify using the Spotify Web API.
 
-Current version: **0.4.2**
+Current version: **0.5.0**
 
 ## Features
 
@@ -10,7 +10,9 @@ Current version: **0.4.2**
 - Play natural-language song requests without requiring PETEY to construct a Spotify URI
 - Continue through the song's album after a requested track finishes
 - Optionally cue PETEY about twenty seconds before a song ends to wrap up the outgoing track and introduce the queued song
-- Post the upcoming song's album artwork in the chat feed with a Spotify link
+- Save three named DJ personas and choose which one handles transitions
+- Optionally blend the DJ persona with the current PETEY system profile
+- Optionally post the upcoming song's album artwork in the chat feed with a Spotify link
 - Fade Spotify down while PETEY speaks and restore the previous device volume afterward
 - Control volume, seek position, shuffle, repeat, queue, and Spotify Connect devices
 - List and inspect your playlists, create playlists, add or remove songs, and edit playlist details
@@ -32,7 +34,7 @@ Current version: **0.4.2**
 
 ### 2. Install the Add-on
 
-Download `petey-spotify-v0.4.2.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
+Download `petey-spotify-v0.5.0.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
 
 Copy the `spotify/` folder to your PETEY data root's `addons/` directory:
 

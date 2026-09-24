@@ -37,6 +37,8 @@ SCOPES = " ".join((
 ))
 MAX_RESULT_CHARS = 60_000
 MAX_DJ_PROMPT_CHARS = 2_000
+MAX_DJ_PERSONA_NAME_CHARS = 60
+DJ_PERSONA_SLOTS = 3
 MAX_PLAYLIST_ITEMS = 100
 DJ_TOOL_SUPPRESSION_SECONDS = 30
 DJ_ANNOUNCE_REMAINING_MS = 20_000
@@ -54,6 +56,14 @@ DEFAULT_DJ_PROMPT = (
     "{artist}' once, then introduce {next_song} by {next_artist} and give one quick "
     "fact about the upcoming song or artist."
 )
+
+
+def _default_dj_personas() -> list[dict]:
+    return [
+        {"id": "1", "name": "Classic DJ", "prompt": DEFAULT_DJ_PROMPT},
+        {"id": "2", "name": "DJ Persona 2", "prompt": ""},
+        {"id": "3", "name": "DJ Persona 3", "prompt": ""},
+    ]
 
 MUSIC_INTENT = re.compile(
     r"\b(spotify|music|song|songs|track|tracks|artist|artists|album|albums|"
@@ -94,7 +104,10 @@ class SpotifyAddon:
         self._emit_event = getattr(context, "emit_event", None)
         self._client_id = ""
         self._dj_mode = False
-        self._dj_prompt = DEFAULT_DJ_PROMPT
+        self._dj_personas = _default_dj_personas()
+        self._active_dj_persona = "1"
+        self._mix_dj_with_profile = False
+        self._post_album_art = True
         self._duck_music = False
         self._duck_volume = DEFAULT_DUCK_VOLUME
         self._fade_duration_ms = DEFAULT_FADE_DURATION_MS
@@ -125,9 +138,14 @@ class SpotifyAddon:
             payload = json.loads(self._config_path.read_text(encoding="utf-8"))
             self._client_id = str(payload.get("client_id") or "")
             self._dj_mode = payload.get("dj_mode", payload.get("announce_track_changes")) is True
-            prompt = str(payload.get("dj_prompt") or "").strip()
-            prompt = self._normalize_dj_prompt(prompt)
-            self._dj_prompt = prompt[:MAX_DJ_PROMPT_CHARS] or DEFAULT_DJ_PROMPT
+            legacy_prompt = self._normalize_dj_prompt(str(payload.get("dj_prompt") or "").strip())
+            self._dj_personas = self._validated_dj_personas(
+                payload.get("dj_personas"), legacy_prompt=legacy_prompt,
+            )
+            active = str(payload.get("active_dj_persona") or "1")
+            self._active_dj_persona = active if active in {"1", "2", "3"} else "1"
+            self._mix_dj_with_profile = payload.get("mix_dj_with_profile") is True
+            self._post_album_art = payload.get("post_album_art", True) is not False
             self._duck_music = payload.get("duck_music") is True
             self._duck_volume = max(0, min(100, int(
                 payload.get("duck_volume", DEFAULT_DUCK_VOLUME)
@@ -147,7 +165,11 @@ class SpotifyAddon:
             json.dumps({
                 "client_id": self._client_id,
                 "dj_mode": self._dj_mode,
-                "dj_prompt": self._dj_prompt,
+                "dj_prompt": self._active_persona()["prompt"],
+                "dj_personas": self._dj_personas,
+                "active_dj_persona": self._active_dj_persona,
+                "mix_dj_with_profile": self._mix_dj_with_profile,
+                "post_album_art": self._post_album_art,
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
@@ -279,17 +301,31 @@ class SpotifyAddon:
             self._write_config()
             return self.status()
 
-    def configure_dj_mode(self, enabled: object, prompt: object) -> dict:
+    def configure_dj_mode(
+        self, enabled: object, prompt: object = None, *, personas: object = None,
+        active_persona: object = None, mix_with_profile: object = False,
+        post_album_art: object = True,
+    ) -> dict:
         if type(enabled) is not bool:
             raise SpotifyError("DJ Mode must be on or off.")
-        prompt_text = self._normalize_dj_prompt(str(prompt or "").strip())
-        if not prompt_text:
-            raise SpotifyError("Enter a DJ Mode prompt.")
-        if len(prompt_text) > MAX_DJ_PROMPT_CHARS:
-            raise SpotifyError(f"DJ Mode prompt must be {MAX_DJ_PROMPT_CHARS} characters or fewer.")
+        if type(mix_with_profile) is not bool:
+            raise SpotifyError("DJ profile blending must be on or off.")
+        if type(post_album_art) is not bool:
+            raise SpotifyError("Album artwork posting must be on or off.")
+        selected = str(active_persona or self._active_dj_persona)
+        if selected not in {"1", "2", "3"}:
+            raise SpotifyError("Choose one of the three DJ personas.")
+        legacy_prompt = self._normalize_dj_prompt(str(prompt or "").strip())
+        validated = self._validated_dj_personas(personas, legacy_prompt=legacy_prompt)
+        active = next(item for item in validated if item["id"] == selected)
+        if enabled and not active["prompt"]:
+            raise SpotifyError("Enter a prompt for the active DJ persona.")
         with self._lock:
             self._dj_mode = enabled
-            self._dj_prompt = prompt_text
+            self._dj_personas = validated
+            self._active_dj_persona = selected
+            self._mix_dj_with_profile = mix_with_profile
+            self._post_album_art = post_album_art
             self._last_track_uri = None
             self._announced_track_uri = None
             self._suppressed_track_uri = None
@@ -334,6 +370,53 @@ class SpotifyAddon:
             flags=re.IGNORECASE,
         )
         return normalized.replace("<song by artist>", "{song} by {artist}")
+
+    @classmethod
+    def _validated_dj_personas(cls, value: object, *, legacy_prompt: str = "") -> list[dict]:
+        supplied = value if isinstance(value, list) else []
+        defaults = _default_dj_personas()
+        result = []
+        for index in range(DJ_PERSONA_SLOTS):
+            item = supplied[index] if index < len(supplied) and isinstance(supplied[index], dict) else {}
+            name = str(item.get("name") or defaults[index]["name"]).strip()
+            if len(name) > MAX_DJ_PERSONA_NAME_CHARS:
+                raise SpotifyError(
+                    f"DJ persona names must be {MAX_DJ_PERSONA_NAME_CHARS} characters or fewer."
+                )
+            raw_prompt = item.get("prompt")
+            if raw_prompt is None and index == 0:
+                raw_prompt = legacy_prompt or defaults[index]["prompt"]
+            persona_prompt = cls._normalize_dj_prompt(str(raw_prompt or "").strip())
+            if len(persona_prompt) > MAX_DJ_PROMPT_CHARS:
+                raise SpotifyError(
+                    f"DJ persona prompts must be {MAX_DJ_PROMPT_CHARS} characters or fewer."
+                )
+            result.append({
+                "id": str(index + 1),
+                "name": name or defaults[index]["name"],
+                "prompt": persona_prompt,
+            })
+        return result
+
+    def _active_persona(self) -> dict:
+        return next(
+            (item for item in self._dj_personas if item["id"] == self._active_dj_persona),
+            self._dj_personas[0],
+        )
+
+    @staticmethod
+    def _persona_instruction(name: str, prompt: str, mix_with_profile: bool) -> str:
+        if mix_with_profile:
+            return (
+                f"Blend the current PETEY system profile with the Spotify DJ persona named {name}. "
+                "Keep PETEY's established personality and voice while applying these DJ directions:\n"
+                f"{prompt}"
+            )
+        return (
+            f"For this Spotify transition, use the DJ persona named {name} as the response style. "
+            "Follow these DJ directions closely:\n"
+            f"{prompt}"
+        )
 
     def save_auth(self, code: object, state: object) -> dict:
         """Validate the OAuth callback and exchange its code using PKCE."""
@@ -384,7 +467,11 @@ class SpotifyAddon:
                 "client_id": self._client_id,
                 "authorized": self._is_token_valid() or bool(self._refresh_token),
                 "dj_mode": self._dj_mode,
-                "dj_prompt": self._dj_prompt,
+                "dj_prompt": self._active_persona()["prompt"],
+                "dj_personas": [dict(item) for item in self._dj_personas],
+                "active_dj_persona": self._active_dj_persona,
+                "mix_dj_with_profile": self._mix_dj_with_profile,
+                "post_album_art": self._post_album_art,
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
@@ -671,7 +758,9 @@ class SpotifyAddon:
         with self._lock:
             enabled = self._dj_mode
             authorized = self._is_token_valid() or bool(self._refresh_token)
-            prompt = self._dj_prompt
+            persona = dict(self._active_persona())
+            mix_with_profile = self._mix_dj_with_profile
+            post_album_art = self._post_album_art
         if not enabled or not authorized or not callable(self._emit_event):
             self._last_track_uri = None
             self._announced_track_uri = None
@@ -716,9 +805,13 @@ class SpotifyAddon:
         artist = track["artists"] or "Unknown artist"
         next_song = upcoming["name"]
         next_artist = upcoming["artists"] or "Unknown artist"
-        details = (
+        prompt = persona["prompt"] or DEFAULT_DJ_PROMPT
+        rendered_prompt = (
             prompt.replace("{song}", song).replace("{artist}", artist)
             .replace("{next_song}", next_song).replace("{next_artist}", next_artist)
+        )
+        details = self._persona_instruction(
+            persona["name"], rendered_prompt, mix_with_profile,
         )
         if "{next_song}" not in prompt and "{next_artist}" not in prompt:
             details += f"\nUpcoming track: {next_song} by {next_artist}."
@@ -732,19 +825,20 @@ class SpotifyAddon:
             "title and artist only once, then immediately focus on introducing the supplied upcoming "
             "song. Keep the transition short enough to finish near the changeover."
         )
-        self._emit_event(
-            details,
-            speak=True,
-            metadata={
-                "spotify_track_uri": track["uri"],
-                "spotify_next_track_uri": upcoming["uri"],
-                "spotify_dj_cue": "track_transition",
+        metadata = {
+            "spotify_track_uri": track["uri"],
+            "spotify_next_track_uri": upcoming["uri"],
+            "spotify_dj_cue": "track_transition",
+            "spotify_dj_persona": persona["name"],
+        }
+        if post_album_art:
+            metadata.update({
                 "chat_image_url": upcoming["image_url"],
                 "chat_image_link": upcoming["spotify_url"],
                 "chat_image_alt": f"Album artwork for {next_song} by {next_artist}",
                 "chat_image_caption": f"Up next: {next_song} by {next_artist}",
-            },
-        )
+            })
+        self._emit_event(details, speak=True, metadata=metadata)
         return DJ_MAX_POLL_SECONDS
 
     def _watch_playback(self) -> None:
@@ -1677,7 +1771,11 @@ def setup(context):
         if not isinstance(payload, dict):
             return jsonify({"error": "Expected a JSON object."}), 400
         return safely(lambda: addon.configure_dj_mode(
-            payload.get("enabled"), payload.get("prompt")
+            payload.get("enabled"), payload.get("prompt"),
+            personas=payload.get("personas"),
+            active_persona=payload.get("active_persona"),
+            mix_with_profile=payload.get("mix_with_profile", False),
+            post_album_art=payload.get("post_album_art", True),
         ))
 
     def save_audio_ducking():

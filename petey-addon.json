@@ -2,7 +2,7 @@
   "api_version": 1,
   "id": "spotify",
   "name": "Spotify",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Search and play songs on Spotify using the Spotify Web API.",
   "entrypoint": "addon.py",
   "panel": "panel.html",
