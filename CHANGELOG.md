@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.1 — 2026-09-24
+
+- Keep consecutive streamed speech segments in one volume-ducking session so an
+  ordinary chat reply restores the volume captured before PETEY began speaking.
+
 ## v0.5.0 — 2026-09-24
 
 - Save and name three independent DJ personas and choose the active persona.

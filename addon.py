@@ -47,6 +47,7 @@ DJ_MIN_POLL_SECONDS = 0.75
 DJ_QUEUE_RETRY_SECONDS = 2.0
 DEFAULT_DUCK_VOLUME = 18
 DEFAULT_FADE_DURATION_MS = 700
+DUCK_RELEASE_GRACE_SECONDS = 0.35
 LEGACY_DJ_PROMPT = (
     "The current song {song} by {artist} has just started playing. "
     "You're a radio DJ announcing the next song and giving a quick fact."
@@ -129,6 +130,7 @@ class SpotifyAddon:
         self._duck_original_volume = None
         self._duck_device_id = ""
         self._duck_timers = {}
+        self._duck_restore_timer = None
         self._fade_generation = 0
         self._load_config()
         self._load_token()
@@ -636,6 +638,9 @@ class SpotifyAddon:
 
     def _restore_ducked_volume(self) -> None:
         with self._lock:
+            self._duck_restore_timer = None
+            if self._duck_clients:
+                return
             original = self._duck_original_volume
             device_id = self._duck_device_id
             duration = self._fade_duration_ms
@@ -664,15 +669,21 @@ class SpotifyAddon:
         with self._lock:
             enabled = self._duck_music
             old_timer = self._duck_timers.pop(client, None)
+            restore_timer = self._duck_restore_timer
+            if active:
+                self._duck_restore_timer = None
         if old_timer is not None:
             old_timer.cancel()
+        if active and restore_timer is not None:
+            restore_timer.cancel()
         if not enabled:
             return {"status": "disabled"}
         if active:
             with self._lock:
                 was_empty = not self._duck_clients
+                continuing_session = self._duck_original_volume is not None
                 self._duck_clients[client] = time.monotonic()
-            if was_empty:
+            if was_empty and not continuing_session:
                 try:
                     state = self.playback_state({})
                     device = state["device"]
@@ -701,8 +712,15 @@ class SpotifyAddon:
             self._duck_clients.pop(client, None)
             should_restore = not self._duck_clients
         if should_restore:
-            self._restore_ducked_volume()
-        return {"status": "restored" if should_restore else "active_elsewhere"}
+            timer = threading.Timer(DUCK_RELEASE_GRACE_SECONDS, self._restore_ducked_volume)
+            timer.daemon = True
+            with self._lock:
+                previous = self._duck_restore_timer
+                self._duck_restore_timer = timer
+            if previous is not None:
+                previous.cancel()
+            timer.start()
+        return {"status": "restore_pending" if should_restore else "active_elsewhere"}
 
     @staticmethod
     def _playback_track(data: object) -> dict | None:
@@ -1710,10 +1728,13 @@ class SpotifyAddon:
             device_id = self._duck_device_id
             timers = list(self._duck_timers.values())
             self._duck_timers.clear()
+            restore_timer, self._duck_restore_timer = self._duck_restore_timer, None
             self._duck_clients.clear()
             self._fade_generation += 1
         for timer in timers:
             timer.cancel()
+        if restore_timer is not None:
+            restore_timer.cancel()
         if original is not None:
             try:
                 params = {"volume_percent": original}
