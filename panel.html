@@ -1,0 +1,87 @@
+<header class="tool-header">
+  <div>
+    <span class="page-eyebrow">ADD-ON</span>
+    <h1>Spotify</h1>
+    <p>Search and play songs, manage playback, and access your top tracks.</p>
+  </div>
+</header>
+<div class="tool-content">
+  <section class="settings-card">
+    <h2>Spotify API Credentials</h2>
+    <p class="hint">Enter your Spotify Web API Client ID. In the Spotify app dashboard, add <code>http://127.0.0.1:8888/callback</code> as a Redirect URI. After installing this version, authorize again once to grant playlist access.</p>
+    <label class="full-field">
+      <span>Client ID</span>
+      <input type="text" id="spotify-client-id" placeholder="Enter your Spotify Client ID">
+    </label>
+    <div class="spotify-actions">
+      <button id="spotify-save-config" class="primary-button" type="button">Save Client ID</button>
+      <button id="spotify-authorize" class="secondary-button" type="button">Authorize with Spotify</button>
+    </div>
+    <p id="spotify-status" class="wide-status" role="status"></p>
+  </section>
+
+  <section class="settings-card">
+    <h2>DJ Mode</h2>
+    <label class="spotify-toggle"><input id="spotify-dj-mode" type="checkbox"><span>Wrap up the old song and introduce the next one about 20 seconds early</span></label>
+    <label class="full-field spotify-dj-prompt-field">
+      <span>DJ prompt</span>
+      <textarea id="spotify-dj-prompt" rows="4" maxlength="2000"></textarea>
+    </label>
+    <p class="hint">Use <code>{song}</code>/<code>{artist}</code> for the outgoing track and <code>{next_song}</code>/<code>{next_artist}</code> for the queued track. Spotify sends the cue when roughly 20 seconds remain, the event stays hidden, and speech respects PETEY’s speaker mute button.</p>
+    <button id="spotify-save-announcements" class="secondary-button" type="button">Save DJ Mode</button>
+    <p id="spotify-dj-status" class="wide-status" role="status"></p>
+  </section>
+
+  <section class="settings-card">
+    <h2>Fade Music While PETEY Speaks</h2>
+    <label class="spotify-toggle"><input id="spotify-duck-music" type="checkbox"><span>Automatically lower Spotify during PETEY’s spoken replies</span></label>
+    <div class="spotify-duck-settings">
+      <label class="full-field"><span>Speaking volume</span><input id="spotify-duck-volume" type="number" min="0" max="100" step="1"></label>
+      <label class="full-field"><span>Fade time (milliseconds)</span><input id="spotify-fade-duration" type="number" min="100" max="3000" step="100"></label>
+    </div>
+    <p class="hint">PETEY captures the active Spotify device’s current volume, fades down when speech actually begins, and restores that exact volume when speech ends. Muted replies do not change Spotify.</p>
+    <button id="spotify-save-ducking" class="secondary-button" type="button">Save Music Fading</button>
+    <p id="spotify-duck-status" class="wide-status" role="status"></p>
+  </section>
+
+  <section class="settings-card">
+    <h2>Now Playing</h2>
+    <div id="spotify-now-playing" class="spotify-now-playing">
+      <p class="hint">No track loaded. Search and play a track to begin.</p>
+    </div>
+    <div class="spotify-playback-controls">
+      <button id="spotify-btn-previous" class="spotify-control-btn" type="button" title="Previous">⏮</button>
+      <button id="spotify-btn-pause" class="spotify-control-btn" type="button" title="Pause">⏸</button>
+      <button id="spotify-btn-resume" class="spotify-control-btn" type="button" title="Play">▶</button>
+      <button id="spotify-btn-next" class="spotify-control-btn" type="button" title="Next">⏭</button>
+    </div>
+  </section>
+
+  <section class="settings-card">
+    <h2>Search</h2>
+    <div class="spotify-search-bar">
+      <input type="text" id="spotify-search-input" placeholder="Search songs, artists, albums...">
+      <select id="spotify-search-type">
+        <option value="track" selected>Track</option>
+        <option value="artist">Artist</option>
+        <option value="album">Album</option>
+        <option value="playlist">Playlist</option>
+      </select>
+      <button id="spotify-search-btn" class="primary-button" type="button">Search</button>
+    </div>
+    <div id="spotify-search-results" class="spotify-results"></div>
+  </section>
+
+  <section class="settings-card">
+    <h2>Top Tracks</h2>
+    <div class="spotify-top-controls">
+      <select id="spotify-top-range">
+        <option value="short_term">Last 4 Weeks</option>
+        <option value="medium_term">Last 6 Months</option>
+        <option value="long_term">All Time</option>
+      </select>
+      <button id="spotify-top-btn" class="secondary-button" type="button">Load Top Tracks</button>
+    </div>
+    <div id="spotify-top-results" class="spotify-results"></div>
+  </section>
+</div>
