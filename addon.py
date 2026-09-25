@@ -114,6 +114,7 @@ class SpotifyAddon:
         self._duck_music = False
         self._duck_volume = DEFAULT_DUCK_VOLUME
         self._fade_duration_ms = DEFAULT_FADE_DURATION_MS
+        self._manual_mute_restore_volume = None
         self._access_token = ""
         self._refresh_token = ""
         self._token_expires_at = 0.0
@@ -160,6 +161,11 @@ class SpotifyAddon:
             self._fade_duration_ms = max(100, min(3000, int(
                 payload.get("fade_duration_ms", DEFAULT_FADE_DURATION_MS)
             )))
+            saved_mute_volume = payload.get("manual_mute_restore_volume")
+            self._manual_mute_restore_volume = (
+                max(1, min(100, int(saved_mute_volume)))
+                if saved_mute_volume is not None else None
+            )
         except FileNotFoundError:
             pass
         except (OSError, ValueError, json.JSONDecodeError):
@@ -181,6 +187,7 @@ class SpotifyAddon:
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
+                "manual_mute_restore_volume": self._manual_mute_restore_volume,
             }, indent=2),
             encoding="utf-8",
         )
@@ -493,6 +500,8 @@ class SpotifyAddon:
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
+                "spotify_muted": self._manual_mute_restore_volume is not None,
+                "spotify_restore_volume": self._manual_mute_restore_volume,
             }
 
     @staticmethod
@@ -567,7 +576,47 @@ class SpotifyAddon:
             raise SpotifyError("Volume must be a percentage from 0 to 100.")
         params = {"volume_percent": volume, **self._device_params(arguments)}
         self._api_request("PUT", "/me/player/volume", params=params)
+        if volume > 0:
+            with self._lock:
+                if self._manual_mute_restore_volume is not None:
+                    self._manual_mute_restore_volume = None
+                    self._write_config()
         return {"status": "volume_set", "volume_percent": volume}
+
+    def set_muted(self, arguments: dict) -> dict:
+        muted = (arguments or {}).get("muted")
+        if type(muted) is not bool:
+            raise SpotifyError("Spotify mute must be on or off.")
+        state = self.playback_state({})
+        device = state.get("device") or {}
+        current = device.get("volume_percent")
+        if not device.get("supports_volume") or current is None:
+            raise SpotifyError("The active Spotify device does not support volume control.")
+        device_id = str(device.get("id") or "")
+        with self._lock:
+            if muted:
+                if int(current) > 0:
+                    restore_volume = int(current)
+                else:
+                    restore_volume = int(self._manual_mute_restore_volume or 50)
+                target = 0
+            else:
+                restore_volume = self._manual_mute_restore_volume
+                target = int(restore_volume or (current if int(current) > 0 else 50))
+        params = {"volume_percent": max(0, min(100, target))}
+        if device_id:
+            params["device_id"] = device_id
+        self._api_request("PUT", "/me/player/volume", params=params)
+        with self._lock:
+            self._fade_generation += 1
+            self._manual_mute_restore_volume = restore_volume if muted else None
+            self._write_config()
+        return {
+            "status": "muted" if muted else "unmuted",
+            "muted": muted,
+            "volume_percent": target,
+            "restore_volume": restore_volume if muted else None,
+        }
 
     def seek(self, arguments: dict) -> dict:
         try:
@@ -660,6 +709,7 @@ class SpotifyAddon:
             original = self._duck_original_volume
             device_id = self._duck_device_id
             duration = self._fade_duration_ms
+            manually_muted = self._manual_mute_restore_volume is not None
             self._duck_clients.clear()
             timers = list(self._duck_timers.values())
             self._duck_timers.clear()
@@ -674,7 +724,8 @@ class SpotifyAddon:
             current = state["device"].get("volume_percent")
         except SpotifyError:
             current = None
-        self._start_volume_fade(int(current if current is not None else original), original, device_id, duration)
+        target = 0 if manually_muted else original
+        self._start_volume_fade(int(current if current is not None else target), target, device_id, duration)
 
     def speech_duck(self, active: object, client_id: object) -> dict:
         if type(active) is not bool:
@@ -1143,10 +1194,20 @@ class SpotifyAddon:
         """Get the currently playing track."""
         data = self._api_request("GET", "/me/player/currently-playing")
         if not data:
-            return {"playing": False, "has_track": False, "message": "Nothing is currently playing."}
+            return {
+                "playing": False, "has_track": False,
+                "muted": self._manual_mute_restore_volume is not None,
+                "restore_volume": self._manual_mute_restore_volume,
+                "message": "Nothing is currently playing.",
+            }
         item = data.get("item") or {}
         if not isinstance(item, dict) or not item:
-            return {"playing": False, "has_track": False, "message": "Spotify did not report a playable track."}
+            return {
+                "playing": False, "has_track": False,
+                "muted": self._manual_mute_restore_volume is not None,
+                "restore_volume": self._manual_mute_restore_volume,
+                "message": "Spotify did not report a playable track.",
+            }
         artists = item.get("artists") or []
         album = item.get("album") or {}
         images = album.get("images") or [] if isinstance(album, dict) else []
@@ -1164,6 +1225,8 @@ class SpotifyAddon:
             "progress_ms": max(0, int(data.get("progress_ms") or 0)),
             "duration_ms": max(0, int(item.get("duration_ms") or 0)),
             "uri": item.get("uri", ""),
+            "muted": self._manual_mute_restore_volume is not None,
+            "restore_volume": self._manual_mute_restore_volume,
         }
 
     def get_top_tracks(self, arguments: dict) -> dict:
@@ -1878,6 +1941,10 @@ def setup(context):
         payload = request.get_json(silent=True) or {}
         return safely(lambda: addon.seek(payload))
 
+    def do_mute():
+        payload = request.get_json(silent=True) or {}
+        return safely(lambda: addon.set_muted(payload))
+
     def do_top_tracks():
         payload = request.get_json(silent=True) or {}
         return safely(lambda: addon.get_top_tracks(payload))
@@ -1898,6 +1965,7 @@ def setup(context):
         ("previous", "previous", ["POST"], do_previous),
         ("currently-playing", "currently_playing", ["GET"], do_currently_playing),
         ("seek", "seek", ["POST"], do_seek),
+        ("mute", "mute", ["POST"], do_mute),
         ("top-tracks", "top_tracks", ["POST"], do_top_tracks),
     )
 

@@ -75,6 +75,39 @@
     return `${min}:${sec.toString().padStart(2, '0')}`;
   }
 
+  const controlIcons = {
+    previous: 'M19 20 9 12l10-8v16zM5 19V5',
+    next: 'M5 4l10 8-10 8V4zm14 1v14',
+    play: 'M8 5v14l11-7L8 5z',
+    pause: 'M8 5v14M16 5v14',
+    volume: 'M11 5L6 9H3v6h3l5 4V5zm4.5 3.5a5 5 0 010 7',
+    muted: 'M11 5L6 9H3v6h3l5 4V5zm4 4l6 6m0-6l-6 6',
+  };
+
+  function setControlIcon(button, icon) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', controlIcons[icon]);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path);
+    button.replaceChildren(svg);
+  }
+
+  function controlButton(label, icon) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    setControlIcon(button, icon);
+    return button;
+  }
+
   function currentProgress() {
     const elapsed = playback.playing && playbackSyncedAt ? Date.now() - playbackSyncedAt : 0;
     return Math.min(Number(playback.duration_ms) || Infinity, Math.max(0, Number(playback.progress_ms) + elapsed));
@@ -167,7 +200,7 @@
 
   function renderRailPlayer(message = '') {
     if (!railPlayer) return;
-    const {art, name, artist, play, empty, content} = railPlayer;
+    const {art, name, artist, play, mute, empty, content} = railPlayer;
     const hasTrack = Boolean(playback.has_track);
     content.hidden = !hasTrack;
     empty.hidden = hasTrack;
@@ -178,9 +211,15 @@
     art.alt = playback.album ? `${playback.album} album artwork` : 'Album artwork';
     name.textContent = playback.name || 'Unknown track';
     artist.textContent = playback.artist || 'Unknown artist';
-    play.textContent = playback.playing ? '❚❚' : '▶';
+    setControlIcon(play, playback.playing ? 'pause' : 'play');
     play.setAttribute('aria-label', playback.playing ? 'Pause' : 'Play');
     play.title = playback.playing ? 'Pause' : 'Play';
+    setControlIcon(mute, playback.muted ? 'muted' : 'volume');
+    mute.classList.toggle('muted', Boolean(playback.muted));
+    mute.setAttribute('aria-label', playback.muted ? 'Unmute Spotify' : 'Mute Spotify');
+    mute.title = playback.muted
+      ? `Unmute and restore ${playback.restore_volume || 50}% volume`
+      : 'Mute Spotify';
     updatePlayhead();
   }
 
@@ -239,6 +278,7 @@
       playbackSyncedAt = Date.now();
       renderPagePlayer();
       renderRailPlayer();
+      updateStandaloneControls();
       return data;
     }).catch(error => {
       renderPagePlayer(error.message);
@@ -263,6 +303,46 @@
     }
   }
 
+  async function runMuteControl() {
+    try {
+      const result = await api('/mute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({muted: !playback.muted}),
+      });
+      playback.muted = Boolean(result.muted);
+      playback.restore_volume = result.restore_volume;
+      renderRailPlayer();
+      updateStandaloneControls();
+      setStatus(result.muted
+        ? `Spotify muted. Volume ${result.restore_volume}% will be restored.`
+        : `Spotify volume restored to ${result.volume_percent}%.`, 'success');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
+  function updateStandaloneControls() {
+    const controls = {
+      previous: id('btn-previous'),
+      pause: id('btn-pause'),
+      play: id('btn-resume'),
+      next: id('btn-next'),
+      mute: id('btn-mute'),
+    };
+    Object.entries(controls).forEach(([icon, button]) => {
+      const iconName = icon === 'mute' ? (playback.muted ? 'muted' : 'volume') : icon;
+      if (button) setControlIcon(button, iconName);
+    });
+    if (controls.mute) {
+      controls.mute.classList.toggle('muted', Boolean(playback.muted));
+      controls.mute.title = playback.muted
+        ? `Unmute and restore ${playback.restore_volume || 50}% volume`
+        : 'Mute Spotify';
+      controls.mute.setAttribute('aria-label', playback.muted ? 'Unmute Spotify' : 'Mute Spotify');
+    }
+  }
+
   function mountRailPlayer(container) {
     container.classList.add('spotify-command-player');
     const content = document.createElement('div');
@@ -279,23 +359,21 @@
     const playhead = makePlayhead('spotify-command-playhead');
     const controls = document.createElement('div');
     controls.className = 'spotify-command-controls';
-    const previous = document.createElement('button');
-    previous.type = 'button'; previous.textContent = '⏮'; previous.title = 'Previous';
-    previous.setAttribute('aria-label', 'Previous song');
-    const play = document.createElement('button');
-    play.type = 'button'; play.setAttribute('aria-label', 'Play');
-    const next = document.createElement('button');
-    next.type = 'button'; next.textContent = '⏭'; next.title = 'Next';
-    next.setAttribute('aria-label', 'Next song');
+    const previous = controlButton('Previous song', 'previous');
+    const play = controlButton('Play', 'play');
+    play.classList.add('primary');
+    const next = controlButton('Next song', 'next');
+    const mute = controlButton('Mute Spotify', 'volume');
     previous.addEventListener('click', () => runPlaybackControl('previous'));
     play.addEventListener('click', () => runPlaybackControl(playback.playing ? 'pause' : 'resume'));
     next.addEventListener('click', () => runPlaybackControl('next'));
-    controls.append(previous, play, next);
-    content.append(art, copy, playhead, controls);
+    mute.addEventListener('click', runMuteControl);
+    controls.append(previous, play, next, mute);
+    content.append(art, playhead, copy, controls);
     const empty = document.createElement('p');
     empty.className = 'command-empty';
     container.append(content, empty);
-    railPlayer = {container, content, art, name, artist, play, empty};
+    railPlayer = {container, content, art, name, artist, play, mute, empty};
     renderRailPlayer();
 
     const panelCard = container.closest('.command-card');
@@ -325,6 +403,10 @@
       id('duck-music').checked = Boolean(status.duck_music);
       id('duck-volume').value = Number(status.duck_volume ?? 18);
       id('fade-duration').value = Number(status.fade_duration_ms ?? 700);
+      playback.muted = Boolean(status.spotify_muted);
+      playback.restore_volume = status.spotify_restore_volume;
+      updateStandaloneControls();
+      renderRailPlayer();
       if (status.authorized) setStatus('Spotify connected.', 'success');
       return status;
     } catch (error) {
@@ -517,6 +599,7 @@
   id('btn-previous').addEventListener('click', async () => {
     runPlaybackControl('previous');
   });
+  id('btn-mute').addEventListener('click', runMuteControl);
 
   window.addEventListener('petey:view', event => {
     if (event.detail.view === 'addon-spotify') {
@@ -534,5 +617,6 @@
     });
   }
 
+  updateStandaloneControls();
   refreshStatus();
 })();

@@ -205,19 +205,20 @@
 }
 
 .spotify-command-content {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 8px 10px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  align-items: stretch;
 }
 
 .spotify-command-art {
-  grid-row: 1 / span 2;
-  width: 52px;
+  align-self: center;
+  width: min(168px, 100%);
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: 7px;
-  box-shadow: 0 7px 18px rgba(0, 0, 0, .3);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .38);
 }
 
 .spotify-command-copy {
@@ -230,48 +231,73 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
 .spotify-command-copy strong {
   color: var(--text, #fff);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .spotify-command-copy span {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted, #9aa5b5);
   font-size: 9px;
 }
 
 .spotify-command-playhead {
-  grid-column: 1 / -1;
-  margin-top: 1px;
+  width: 100%;
+  margin-top: 0;
 }
 
 .spotify-command-controls {
-  grid-column: 1 / -1;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 9px;
 }
 
 .spotify-command-controls button {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid var(--border, #2b394d);
   border-radius: 50%;
-  background: #0b121c;
+  background: linear-gradient(180deg, #121c29, #09111b);
   color: var(--text, #fff);
   cursor: pointer;
-  font-size: 12px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, .22);
+  transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
 }
 
 .spotify-command-controls button:hover {
   border-color: #1ed760;
   color: #1ed760;
+  transform: translateY(-1px);
+}
+
+.spotify-command-controls button.primary {
+  width: 42px;
+  height: 42px;
+  border-color: color-mix(in srgb, #1ed760 70%, var(--border, #2b394d));
+  background: color-mix(in srgb, #1ed760 18%, #09111b);
+  color: #42e77c;
+}
+
+.spotify-command-controls button.muted,
+[data-addon-id="spotify"] .spotify-control-btn.muted {
+  border-color: color-mix(in srgb, #ff5568 72%, var(--border, #2b394d));
+  background: color-mix(in srgb, #ff334f 14%, #09111b);
+  color: #ff7180;
+}
+
+.spotify-command-controls svg,
+[data-addon-id="spotify"] .spotify-control-btn svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
 }
 
 @media (max-width: 640px) {

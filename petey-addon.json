@@ -2,7 +2,7 @@
   "api_version": 1,
   "id": "spotify",
   "name": "Spotify",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Control Spotify with PETEY, DJ Mode, playlists, and a live Command Center player.",
   "repository": "https://github.com/bizzomephisto/PETEY-SPOTIFY",
   "entrypoint": "addon.py",

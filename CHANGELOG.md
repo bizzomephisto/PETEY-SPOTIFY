@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.1 — 2026-09-24
+
+- Redesign the Command Center player as a clean vertical stack with larger album
+  art, playhead, song information, and consistent SVG playback controls.
+- Add a Spotify mute control that persists the captured device volume and restores
+  that exact level after unmuting, including across PETEY restarts.
+- Add the same clean control icons and mute button to Spotify's full add-on page.
+
 ## v0.7.0 — 2026-09-24
 
 - Add a live Command Center player with album art, song and artist, previous,
