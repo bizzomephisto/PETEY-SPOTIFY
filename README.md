@@ -2,7 +2,7 @@
 
 Search and play songs on Spotify using the Spotify Web API.
 
-Current version: **0.5.0**
+Current version: **0.5.1**
 
 ## Features
 
@@ -34,7 +34,7 @@ Current version: **0.5.0**
 
 ### 2. Install the Add-on
 
-Download `petey-spotify-v0.5.0.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
+Download `petey-spotify-v0.5.1.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
 
 Copy the `spotify/` folder to your PETEY data root's `addons/` directory:
 
