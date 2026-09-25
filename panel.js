@@ -4,6 +4,10 @@
   const duckingClientId = window.crypto?.randomUUID?.()
     || `spotify-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   let duckingRequest = Promise.resolve();
+  let playback = {playing: false, has_track: false, progress_ms: 0, duration_ms: 0};
+  let playbackSyncedAt = 0;
+  let nowPlayingRequest = null;
+  let railPlayer = null;
 
   async function api(path, options = {}) {
     const response = await fetch(base + path, options);
@@ -65,9 +69,119 @@
   }
 
   function formatDuration(ms) {
-    const min = Math.floor(ms / 60000);
-    const sec = Math.floor((ms % 60000) / 1000);
+    const safe = Math.max(0, Number(ms) || 0);
+    const min = Math.floor(safe / 60000);
+    const sec = Math.floor((safe % 60000) / 1000);
     return `${min}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  function currentProgress() {
+    const elapsed = playback.playing && playbackSyncedAt ? Date.now() - playbackSyncedAt : 0;
+    return Math.min(Number(playback.duration_ms) || Infinity, Math.max(0, Number(playback.progress_ms) + elapsed));
+  }
+
+  function updatePlayhead() {
+    const progress = currentProgress();
+    const duration = Number(playback.duration_ms) || 0;
+    document.querySelectorAll('[data-spotify-progress]').forEach(input => {
+      input.max = String(Math.max(1, duration));
+      input.value = String(Math.min(duration || progress, progress));
+      input.style.setProperty('--spotify-progress', `${duration ? (progress / duration) * 100 : 0}%`);
+    });
+    document.querySelectorAll('[data-spotify-time]').forEach(label => {
+      label.textContent = `${formatDuration(progress)} / ${formatDuration(duration)}`;
+    });
+  }
+
+  function albumArt(data, className) {
+    const image = document.createElement('img');
+    image.className = className;
+    image.src = data.image_url;
+    image.alt = data.album ? `${data.album} album artwork` : 'Album artwork';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    return image;
+  }
+
+  function makePlayhead(className) {
+    const wrap = document.createElement('div');
+    wrap.className = className;
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '0';
+    range.step = '1000';
+    range.dataset.spotifyProgress = '';
+    range.setAttribute('aria-label', 'Song position');
+    range.addEventListener('input', () => {
+      playback.progress_ms = Number(range.value);
+      playbackSyncedAt = Date.now();
+      updatePlayhead();
+    });
+    range.addEventListener('change', async () => {
+      try {
+        await api('/seek', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({position_ms: Number(range.value)}),
+        });
+      } catch (error) {
+        setStatus(error.message, 'error');
+        refreshNowPlaying();
+      }
+    });
+    const time = document.createElement('span');
+    time.dataset.spotifyTime = '';
+    wrap.append(range, time);
+    return wrap;
+  }
+
+  function renderPagePlayer(message = '') {
+    const container = id('now-playing');
+    container.replaceChildren();
+    if (!playback.has_track) {
+      const p = document.createElement('p');
+      p.className = 'hint';
+      p.textContent = message || 'Nothing is currently playing.';
+      container.append(p);
+      return;
+    }
+    const layout = document.createElement('div');
+    layout.className = 'spotify-now-layout';
+    if (playback.image_url) layout.append(albumArt(playback, 'spotify-now-art'));
+    const track = document.createElement('div');
+    track.className = 'spotify-now-track';
+    const name = document.createElement('div');
+    name.className = 'spotify-now-name';
+    name.textContent = playback.name || 'Unknown';
+    const artist = document.createElement('div');
+    artist.className = 'spotify-now-artist';
+    artist.textContent = playback.artist || '';
+    const album = document.createElement('div');
+    album.className = 'spotify-now-album';
+    album.textContent = playback.album || '';
+    track.append(name, artist, album, makePlayhead('spotify-now-playhead'));
+    layout.append(track);
+    container.append(layout);
+    updatePlayhead();
+  }
+
+  function renderRailPlayer(message = '') {
+    if (!railPlayer) return;
+    const {art, name, artist, play, empty, content} = railPlayer;
+    const hasTrack = Boolean(playback.has_track);
+    content.hidden = !hasTrack;
+    empty.hidden = hasTrack;
+    empty.textContent = message || 'Nothing is playing.';
+    if (!hasTrack) return;
+    art.hidden = !playback.image_url;
+    if (playback.image_url && art.src !== playback.image_url) art.src = playback.image_url;
+    art.alt = playback.album ? `${playback.album} album artwork` : 'Album artwork';
+    name.textContent = playback.name || 'Unknown track';
+    artist.textContent = playback.artist || 'Unknown artist';
+    play.textContent = playback.playing ? '❚❚' : '▶';
+    play.setAttribute('aria-label', playback.playing ? 'Pause' : 'Play');
+    play.title = playback.playing ? 'Pause' : 'Play';
+    updatePlayhead();
   }
 
   function renderTrack(track, showPlay = true) {
@@ -119,46 +233,87 @@
   }
 
   async function refreshNowPlaying() {
+    if (nowPlayingRequest) return nowPlayingRequest;
+    nowPlayingRequest = api('/currently-playing').then(data => {
+      playback = {...playback, ...data};
+      playbackSyncedAt = Date.now();
+      renderPagePlayer();
+      renderRailPlayer();
+      return data;
+    }).catch(error => {
+      renderPagePlayer(error.message);
+      renderRailPlayer(error.message);
+    }).finally(() => { nowPlayingRequest = null; });
+    return nowPlayingRequest;
+  }
+
+  async function runPlaybackControl(action) {
     try {
-      const data = await api('/currently-playing');
-      const container = id('now-playing');
-      container.textContent = '';
-      if (!data.playing) {
-        const p = document.createElement('p');
-        p.className = 'hint';
-        p.textContent = 'Nothing is currently playing.';
-        container.append(p);
-        return;
-      }
-      const track = document.createElement('div');
-      track.className = 'spotify-now-track';
-
-      const name = document.createElement('div');
-      name.className = 'spotify-now-name';
-      name.textContent = data.name || 'Unknown';
-
-      const artist = document.createElement('div');
-      artist.className = 'spotify-now-artist';
-      artist.textContent = data.artist || '';
-
-      const album = document.createElement('div');
-      album.className = 'spotify-now-album';
-      album.textContent = data.album || '';
-
-      const progress = document.createElement('div');
-      progress.className = 'spotify-now-progress';
-      progress.textContent = `${formatDuration(data.progress_ms || 0)} / ${formatDuration(data.duration_ms || 0)}`;
-
-      track.append(name, artist, album, progress);
-      container.append(track);
+      await api(`/${action}`, {method: 'POST'});
+      if (action === 'pause') playback.playing = false;
+      if (action === 'resume') playback.playing = true;
+      playbackSyncedAt = Date.now();
+      renderRailPlayer();
+      setStatus(action === 'next' ? 'Skipped to next.'
+        : action === 'previous' ? 'Skipped to previous.'
+          : action === 'pause' ? 'Paused.' : 'Resumed.', 'success');
+      window.setTimeout(refreshNowPlaying, action === 'next' || action === 'previous' ? 900 : 150);
     } catch (error) {
-      const container = id('now-playing');
-      container.textContent = '';
-      const p = document.createElement('p');
-      p.className = 'hint';
-      p.textContent = error.message;
-      container.append(p);
+      setStatus(error.message, 'error');
     }
+  }
+
+  function mountRailPlayer(container) {
+    container.classList.add('spotify-command-player');
+    const content = document.createElement('div');
+    content.className = 'spotify-command-content';
+    const art = document.createElement('img');
+    art.className = 'spotify-command-art';
+    art.loading = 'lazy';
+    art.referrerPolicy = 'no-referrer';
+    const copy = document.createElement('div');
+    copy.className = 'spotify-command-copy';
+    const name = document.createElement('strong');
+    const artist = document.createElement('span');
+    copy.append(name, artist);
+    const playhead = makePlayhead('spotify-command-playhead');
+    const controls = document.createElement('div');
+    controls.className = 'spotify-command-controls';
+    const previous = document.createElement('button');
+    previous.type = 'button'; previous.textContent = '⏮'; previous.title = 'Previous';
+    previous.setAttribute('aria-label', 'Previous song');
+    const play = document.createElement('button');
+    play.type = 'button'; play.setAttribute('aria-label', 'Play');
+    const next = document.createElement('button');
+    next.type = 'button'; next.textContent = '⏭'; next.title = 'Next';
+    next.setAttribute('aria-label', 'Next song');
+    previous.addEventListener('click', () => runPlaybackControl('previous'));
+    play.addEventListener('click', () => runPlaybackControl(playback.playing ? 'pause' : 'resume'));
+    next.addEventListener('click', () => runPlaybackControl('next'));
+    controls.append(previous, play, next);
+    content.append(art, copy, playhead, controls);
+    const empty = document.createElement('p');
+    empty.className = 'command-empty';
+    container.append(content, empty);
+    railPlayer = {container, content, art, name, artist, play, empty};
+    renderRailPlayer();
+
+    const panelCard = container.closest('.command-card');
+    const active = () => document.visibilityState === 'visible'
+      && document.documentElement.dataset.commandRail === 'open'
+      && !panelCard?.classList.contains('collapsed');
+    const poll = window.setInterval(() => { if (active()) refreshNowPlaying(); }, 15000);
+    const tick = window.setInterval(() => { if (active()) updatePlayhead(); }, 1000);
+    const observer = new MutationObserver(() => { if (active()) refreshNowPlaying(); });
+    observer.observe(document.documentElement, {attributes: true, attributeFilter: ['data-command-rail']});
+    if (panelCard) observer.observe(panelCard, {attributes: true, attributeFilter: ['class']});
+    if (active()) refreshNowPlaying();
+    return () => {
+      window.clearInterval(poll);
+      window.clearInterval(tick);
+      observer.disconnect();
+      railPlayer = null;
+    };
   }
 
   async function refreshStatus() {
@@ -348,43 +503,19 @@
   });
 
   id('btn-pause').addEventListener('click', async () => {
-    try {
-      await api('/pause', { method: 'POST' });
-      setStatus('Paused.', 'success');
-      refreshNowPlaying();
-    } catch (error) {
-      setStatus(error.message, 'error');
-    }
+    runPlaybackControl('pause');
   });
 
   id('btn-resume').addEventListener('click', async () => {
-    try {
-      await api('/resume', { method: 'POST' });
-      setStatus('Resumed.', 'success');
-      refreshNowPlaying();
-    } catch (error) {
-      setStatus(error.message, 'error');
-    }
+    runPlaybackControl('resume');
   });
 
   id('btn-next').addEventListener('click', async () => {
-    try {
-      await api('/next', { method: 'POST' });
-      setStatus('Skipped to next.', 'success');
-      setTimeout(refreshNowPlaying, 1000);
-    } catch (error) {
-      setStatus(error.message, 'error');
-    }
+    runPlaybackControl('next');
   });
 
   id('btn-previous').addEventListener('click', async () => {
-    try {
-      await api('/previous', { method: 'POST' });
-      setStatus('Skipped to previous.', 'success');
-      setTimeout(refreshNowPlaying, 1000);
-    } catch (error) {
-      setStatus(error.message, 'error');
-    }
+    runPlaybackControl('previous');
   });
 
   window.addEventListener('petey:view', event => {
@@ -393,6 +524,15 @@
       refreshNowPlaying();
     }
   });
+
+  if (typeof window.peteyInterface?.registerPanel === 'function') {
+    window.peteyInterface.registerPanel({
+      id: 'spotify-now-playing',
+      title: 'Now playing',
+      icon: '♫',
+      render: mountRailPlayer,
+    });
+  }
 
   refreshStatus();
 })();

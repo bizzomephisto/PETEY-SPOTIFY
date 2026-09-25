@@ -2,7 +2,7 @@
 
 Search and play songs on Spotify using the Spotify Web API.
 
-Current version: **0.6.0**
+Current version: **0.7.0**
 
 ## Features
 
@@ -19,6 +19,7 @@ Current version: **0.6.0**
 - Play tracks and playlists on active Spotify devices
 - Pause, resume, skip forward, and skip backward playback
 - View the currently playing track
+- Keep album art, song and artist, playback controls, and a seekable playhead in PETEY's Command Center rail
 - Access your personal top tracks across different time ranges
 - Conversational tools that Petey can invoke when you mention music/Spotify intent
 
@@ -34,7 +35,7 @@ Current version: **0.6.0**
 
 ### 2. Install the Add-on
 
-Download `petey-spotify-v0.6.0.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
+Download `petey-spotify-v0.7.0.zip` from the [latest release](https://github.com/bizzomephisto/PETEY-SPOTIFY/releases/latest), then extract it.
 
 Copy the `spotify/` folder to your PETEY data root's `addons/` directory:
 
@@ -110,6 +111,7 @@ All routes are under `/api/addons/spotify/`:
 | POST | `/next` | Skip to next track |
 | POST | `/previous` | Skip to previous track |
 | GET | `/currently-playing` | Get current playback state |
+| POST | `/seek` | Move the current track to a new playhead position |
 | POST | `/top-tracks` | Get user's top tracks |
 
 ## Security

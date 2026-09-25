@@ -125,6 +125,21 @@
   margin-top: 0.5rem;
 }
 
+[data-addon-id="spotify"] .spotify-now-layout {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+[data-addon-id="spotify"] .spotify-now-art {
+  width: 96px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
 [data-addon-id="spotify"] .spotify-now-track {
   display: flex;
   flex-direction: column;
@@ -151,6 +166,119 @@
   font-size: 0.8rem;
   color: var(--text-secondary, #888);
   font-family: monospace;
+}
+
+[data-addon-id="spotify"] .spotify-now-playhead,
+.spotify-command-playhead {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.45rem;
+}
+
+[data-addon-id="spotify"] [data-spotify-progress],
+.spotify-command-player [data-spotify-progress] {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: linear-gradient(90deg, #1ed760 var(--spotify-progress, 0%), rgba(255, 255, 255, 0.16) var(--spotify-progress, 0%));
+  cursor: pointer;
+}
+
+[data-addon-id="spotify"] [data-spotify-progress]::-webkit-slider-thumb,
+.spotify-command-player [data-spotify-progress]::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+
+[data-addon-id="spotify"] [data-spotify-time],
+.spotify-command-player [data-spotify-time] {
+  color: var(--muted, #8d98a8);
+  font: 500 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: right;
+}
+
+.spotify-command-content {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.spotify-command-art {
+  grid-row: 1 / span 2;
+  width: 52px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 7px;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, .3);
+}
+
+.spotify-command-copy {
+  min-width: 0;
+}
+
+.spotify-command-copy strong,
+.spotify-command-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotify-command-copy strong {
+  color: var(--text, #fff);
+  font-size: 11px;
+}
+
+.spotify-command-copy span {
+  margin-top: 3px;
+  color: var(--muted, #9aa5b5);
+  font-size: 9px;
+}
+
+.spotify-command-playhead {
+  grid-column: 1 / -1;
+  margin-top: 1px;
+}
+
+.spotify-command-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.spotify-command-controls button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border, #2b394d);
+  border-radius: 50%;
+  background: #0b121c;
+  color: var(--text, #fff);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.spotify-command-controls button:hover {
+  border-color: #1ed760;
+  color: #1ed760;
+}
+
+@media (max-width: 640px) {
+  [data-addon-id="spotify"] .spotify-now-layout {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  [data-addon-id="spotify"] .spotify-now-art { width: 72px; }
 }
 
 [data-addon-id="spotify"] .spotify-playback-controls {

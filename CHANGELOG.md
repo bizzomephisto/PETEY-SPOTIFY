@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 — 2026-09-24
+
+- Add a live Command Center player with album art, song and artist, previous,
+  play or pause, next, and a seekable playhead.
+- Advance the playhead locally once per second and reconcile with Spotify only
+  every 15 seconds while the visible player is expanded.
+- Keep paused-track metadata visible instead of replacing it with an empty state.
+- Add a bounded HTTP seek route for the player without changing model grants.
+
 ## v0.6.0 — 2026-09-24
 
 - Let the user choose when DJ Mode starts its transition from 25 seconds before

@@ -1142,20 +1142,27 @@ class SpotifyAddon:
     def currently_playing(self, _arguments: dict) -> dict:
         """Get the currently playing track."""
         data = self._api_request("GET", "/me/player/currently-playing")
-        if not data or not data.get("is_playing"):
-            return {"playing": False, "message": "Nothing is currently playing."}
+        if not data:
+            return {"playing": False, "has_track": False, "message": "Nothing is currently playing."}
         item = data.get("item") or {}
-        if not isinstance(item, dict):
-            return {"playing": False, "message": "Spotify did not report a playable track."}
+        if not isinstance(item, dict) or not item:
+            return {"playing": False, "has_track": False, "message": "Spotify did not report a playable track."}
         artists = item.get("artists") or []
         album = item.get("album") or {}
+        images = album.get("images") or [] if isinstance(album, dict) else []
+        external_urls = item.get("external_urls") or {}
         return {
-            "playing": True,
+            "playing": bool(data.get("is_playing")),
+            "has_track": True,
             "name": item.get("name", ""),
             "artist": ", ".join(str(a.get("name") or "") for a in artists if isinstance(a, dict)),
             "album": album.get("name", "") if isinstance(album, dict) else "",
-            "progress_ms": data.get("progress_ms", 0),
-            "duration_ms": item.get("duration_ms", 0),
+            "image_url": str(images[0].get("url") or "")
+            if images and isinstance(images[0], dict) else "",
+            "spotify_url": str(external_urls.get("spotify") or "")
+            if isinstance(external_urls, dict) else "",
+            "progress_ms": max(0, int(data.get("progress_ms") or 0)),
+            "duration_ms": max(0, int(item.get("duration_ms") or 0)),
             "uri": item.get("uri", ""),
         }
 
@@ -1867,6 +1874,10 @@ def setup(context):
     def do_currently_playing():
         return safely(lambda: addon.currently_playing({}))
 
+    def do_seek():
+        payload = request.get_json(silent=True) or {}
+        return safely(lambda: addon.seek(payload))
+
     def do_top_tracks():
         payload = request.get_json(silent=True) or {}
         return safely(lambda: addon.get_top_tracks(payload))
@@ -1886,6 +1897,7 @@ def setup(context):
         ("next", "next", ["POST"], do_next),
         ("previous", "previous", ["POST"], do_previous),
         ("currently-playing", "currently_playing", ["GET"], do_currently_playing),
+        ("seek", "seek", ["POST"], do_seek),
         ("top-tracks", "top_tracks", ["POST"], do_top_tracks),
     )
 
