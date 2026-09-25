@@ -51,6 +51,7 @@
 }
 
 [data-addon-id="spotify"] .spotify-dj-options select,
+[data-addon-id="spotify"] .spotify-dj-options input[type="range"],
 [data-addon-id="spotify"] .spotify-dj-persona input {
   box-sizing: border-box;
   width: 100%;
@@ -60,6 +61,11 @@
   background: var(--input-bg, #1a1a1a);
   color: var(--text-primary, #fff);
   font: inherit;
+}
+
+[data-addon-id="spotify"] .spotify-dj-timing output {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.85rem;
 }
 
 [data-addon-id="spotify"] .spotify-dj-personas {

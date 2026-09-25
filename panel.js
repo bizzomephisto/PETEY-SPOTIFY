@@ -53,6 +53,15 @@
     id('dj-mode').checked = Boolean(status.dj_mode);
     id('dj-mix-profile').checked = Boolean(status.mix_dj_with_profile);
     id('dj-post-album-art').checked = status.post_album_art !== false;
+    id('dj-wrapup-seconds').value = Number(status.dj_wrapup_seconds ?? 20);
+    updateDjWrapupLabel();
+  }
+
+  function updateDjWrapupLabel() {
+    const seconds = Number(id('dj-wrapup-seconds').value || 0);
+    id('dj-wrapup-output').textContent = seconds === 0
+      ? 'Right when it ends'
+      : `${seconds} second${seconds === 1 ? '' : 's'} early`;
   }
 
   function formatDuration(ms) {
@@ -219,6 +228,7 @@
           active_persona: id('dj-active-persona').value,
           mix_with_profile: id('dj-mix-profile').checked,
           post_album_art: id('dj-post-album-art').checked,
+          wrapup_seconds: Number(id('dj-wrapup-seconds').value),
         }),
       });
       renderDjSettings(status);
@@ -231,6 +241,7 @@
   djPersonaFields.forEach(field => {
     field.name.addEventListener('input', () => updateDjPersonaOptions());
   });
+  id('dj-wrapup-seconds').addEventListener('input', updateDjWrapupLabel);
 
   id('save-ducking').addEventListener('click', async () => {
     try {

@@ -2,7 +2,7 @@
   "api_version": 1,
   "id": "spotify",
   "name": "Spotify",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Search and play songs on Spotify using the Spotify Web API.",
   "repository": "https://github.com/bizzomephisto/PETEY-SPOTIFY",
   "entrypoint": "addon.py",

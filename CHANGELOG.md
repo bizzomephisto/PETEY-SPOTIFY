@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.0 — 2026-09-24
+
+- Let the user choose when DJ Mode starts its transition from 25 seconds before
+  the end of a track through the moment the track ends.
+- Persist the selected timing and give the DJ prompt accurate timing context.
+
 ## v0.5.1 — 2026-09-24
 
 - Keep consecutive streamed speech segments in one volume-ducking session so an

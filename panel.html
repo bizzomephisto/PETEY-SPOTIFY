@@ -22,9 +22,10 @@
 
   <section class="settings-card">
     <h2>DJ Mode</h2>
-    <label class="spotify-toggle"><input id="spotify-dj-mode" type="checkbox"><span>Wrap up the old song and introduce the next one about 20 seconds early</span></label>
+    <label class="spotify-toggle"><input id="spotify-dj-mode" type="checkbox"><span>Wrap up the old song and introduce the next one</span></label>
     <div class="spotify-dj-options">
       <label><span>Active DJ persona</span><select id="spotify-dj-active-persona"><option value="1">Classic DJ</option><option value="2">DJ Persona 2</option><option value="3">DJ Persona 3</option></select></label>
+      <label class="spotify-dj-timing"><span>Start wrap-up</span><input id="spotify-dj-wrapup-seconds" type="range" min="0" max="25" step="1" value="20"><output id="spotify-dj-wrapup-output">20 seconds early</output></label>
       <label class="spotify-toggle"><input id="spotify-dj-mix-profile" type="checkbox"><span>Blend the DJ persona with the current PETEY profile</span></label>
       <label class="spotify-toggle"><input id="spotify-dj-post-album-art" type="checkbox"><span>Post the upcoming album art to chat</span></label>
     </div>
@@ -45,7 +46,7 @@
         <label class="spotify-dj-prompt-field"><span>DJ prompt</span><textarea id="spotify-dj-prompt-3" rows="4" maxlength="2000"></textarea></label>
       </section>
     </div>
-    <p class="hint">Use <code>{song}</code>/<code>{artist}</code> for the outgoing track and <code>{next_song}</code>/<code>{next_artist}</code> for the queued track. Spotify sends the cue when roughly 20 seconds remain, the event stays hidden, and speech respects PETEY’s speaker mute button.</p>
+    <p class="hint">Use <code>{song}</code>/<code>{artist}</code> for the outgoing track and <code>{next_song}</code>/<code>{next_artist}</code> for the queued track. Choose 0 seconds to cue PETEY right as the song ends. The event stays hidden and speech respects PETEY’s speaker mute button.</p>
     <button id="spotify-save-announcements" class="secondary-button" type="button">Save DJ Mode</button>
     <p id="spotify-dj-status" class="wide-status" role="status"></p>
   </section>

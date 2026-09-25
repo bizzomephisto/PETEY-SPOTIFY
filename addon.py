@@ -41,7 +41,8 @@ MAX_DJ_PERSONA_NAME_CHARS = 60
 DJ_PERSONA_SLOTS = 3
 MAX_PLAYLIST_ITEMS = 100
 DJ_TOOL_SUPPRESSION_SECONDS = 30
-DJ_ANNOUNCE_REMAINING_MS = 20_000
+DEFAULT_DJ_WRAPUP_SECONDS = 20
+MAX_DJ_WRAPUP_SECONDS = 25
 DJ_MAX_POLL_SECONDS = 6.0
 DJ_MIN_POLL_SECONDS = 0.75
 DJ_QUEUE_RETRY_SECONDS = 2.0
@@ -109,6 +110,7 @@ class SpotifyAddon:
         self._active_dj_persona = "1"
         self._mix_dj_with_profile = False
         self._post_album_art = True
+        self._dj_wrapup_seconds = DEFAULT_DJ_WRAPUP_SECONDS
         self._duck_music = False
         self._duck_volume = DEFAULT_DUCK_VOLUME
         self._fade_duration_ms = DEFAULT_FADE_DURATION_MS
@@ -148,6 +150,9 @@ class SpotifyAddon:
             self._active_dj_persona = active if active in {"1", "2", "3"} else "1"
             self._mix_dj_with_profile = payload.get("mix_dj_with_profile") is True
             self._post_album_art = payload.get("post_album_art", True) is not False
+            self._dj_wrapup_seconds = max(0, min(MAX_DJ_WRAPUP_SECONDS, int(
+                payload.get("dj_wrapup_seconds", DEFAULT_DJ_WRAPUP_SECONDS)
+            )))
             self._duck_music = payload.get("duck_music") is True
             self._duck_volume = max(0, min(100, int(
                 payload.get("duck_volume", DEFAULT_DUCK_VOLUME)
@@ -172,6 +177,7 @@ class SpotifyAddon:
                 "active_dj_persona": self._active_dj_persona,
                 "mix_dj_with_profile": self._mix_dj_with_profile,
                 "post_album_art": self._post_album_art,
+                "dj_wrapup_seconds": self._dj_wrapup_seconds,
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
@@ -306,7 +312,7 @@ class SpotifyAddon:
     def configure_dj_mode(
         self, enabled: object, prompt: object = None, *, personas: object = None,
         active_persona: object = None, mix_with_profile: object = False,
-        post_album_art: object = True,
+        post_album_art: object = True, wrapup_seconds: object = None,
     ) -> dict:
         if type(enabled) is not bool:
             raise SpotifyError("DJ Mode must be on or off.")
@@ -314,6 +320,14 @@ class SpotifyAddon:
             raise SpotifyError("DJ profile blending must be on or off.")
         if type(post_album_art) is not bool:
             raise SpotifyError("Album artwork posting must be on or off.")
+        try:
+            cue_seconds = int(
+                self._dj_wrapup_seconds if wrapup_seconds is None else wrapup_seconds
+            )
+        except (TypeError, ValueError) as exc:
+            raise SpotifyError("DJ wrap-up time must be a whole number from 0 to 25 seconds.") from exc
+        if cue_seconds < 0 or cue_seconds > MAX_DJ_WRAPUP_SECONDS:
+            raise SpotifyError("DJ wrap-up time must be from 0 to 25 seconds.")
         selected = str(active_persona or self._active_dj_persona)
         if selected not in {"1", "2", "3"}:
             raise SpotifyError("Choose one of the three DJ personas.")
@@ -328,6 +342,7 @@ class SpotifyAddon:
             self._active_dj_persona = selected
             self._mix_dj_with_profile = mix_with_profile
             self._post_album_art = post_album_art
+            self._dj_wrapup_seconds = cue_seconds
             self._last_track_uri = None
             self._announced_track_uri = None
             self._suppressed_track_uri = None
@@ -474,6 +489,7 @@ class SpotifyAddon:
                 "active_dj_persona": self._active_dj_persona,
                 "mix_dj_with_profile": self._mix_dj_with_profile,
                 "post_album_art": self._post_album_art,
+                "dj_wrapup_seconds": self._dj_wrapup_seconds,
                 "duck_music": self._duck_music,
                 "duck_volume": self._duck_volume,
                 "fade_duration_ms": self._fade_duration_ms,
@@ -779,6 +795,7 @@ class SpotifyAddon:
             persona = dict(self._active_persona())
             mix_with_profile = self._mix_dj_with_profile
             post_album_art = self._post_album_art
+            wrapup_seconds = self._dj_wrapup_seconds
         if not enabled or not authorized or not callable(self._emit_event):
             self._last_track_uri = None
             self._announced_track_uri = None
@@ -805,10 +822,11 @@ class SpotifyAddon:
                 self._suppressed_track_until = 0.0
         if suppress:
             return DJ_MAX_POLL_SECONDS
-        if duration_ms <= 0 or remaining_ms <= 0:
+        if duration_ms <= 0:
             return DJ_MIN_POLL_SECONDS
-        if remaining_ms > DJ_ANNOUNCE_REMAINING_MS:
-            seconds_until_cue = (remaining_ms - DJ_ANNOUNCE_REMAINING_MS) / 1000
+        cue_remaining_ms = max(int(DJ_MIN_POLL_SECONDS * 1000), wrapup_seconds * 1000)
+        if remaining_ms > cue_remaining_ms:
+            seconds_until_cue = (remaining_ms - cue_remaining_ms) / 1000
             return min(DJ_MAX_POLL_SECONDS, max(DJ_MIN_POLL_SECONDS, seconds_until_cue))
         upcoming = self._queued_track(
             self._api_request("GET", "/me/player/queue"), track["uri"]
@@ -838,8 +856,13 @@ class SpotifyAddon:
                 f"\nUpcoming-track metadata: album {upcoming['album'] or 'Unknown'}; "
                 f"release date {upcoming['release_date'] or 'Unknown'}."
             )
+        timing = (
+            "the outgoing song is ending now"
+            if wrapup_seconds == 0 else
+            f"Spotify reports about {wrapup_seconds} seconds remain"
+        )
         details += (
-            "\nTiming: Spotify reports about twenty seconds remain. Mention the outgoing song's "
+            f"\nTiming: {timing}. Mention the outgoing song's "
             "title and artist only once, then immediately focus on introducing the supplied upcoming "
             "song. Keep the transition short enough to finish near the changeover."
         )
@@ -1797,6 +1820,7 @@ def setup(context):
             active_persona=payload.get("active_persona"),
             mix_with_profile=payload.get("mix_with_profile", False),
             post_album_art=payload.get("post_album_art", True),
+            wrapup_seconds=payload.get("wrapup_seconds"),
         ))
 
     def save_audio_ducking():

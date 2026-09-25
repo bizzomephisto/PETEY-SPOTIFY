@@ -29,8 +29,10 @@ class SpotifyDjPersonaTests(unittest.TestCase):
             self.assertIn(f'id="spotify-dj-prompt-{slot}"', html)
         self.assertIn('id="spotify-dj-mix-profile"', html)
         self.assertIn('id="spotify-dj-post-album-art"', html)
+        self.assertIn('id="spotify-dj-wrapup-seconds"', html)
         self.assertIn("mix_with_profile: id('dj-mix-profile').checked", script)
         self.assertIn("post_album_art: id('dj-post-album-art').checked", script)
+        self.assertIn("wrapup_seconds: Number(id('dj-wrapup-seconds').value)", script)
 
     def test_three_personas_active_choice_and_toggles_persist(self):
         personas = [
@@ -40,13 +42,14 @@ class SpotifyDjPersonaTests(unittest.TestCase):
         ]
         status = self.addon.configure_dj_mode(
             True, personas=personas, active_persona="2",
-            mix_with_profile=True, post_album_art=False,
+            mix_with_profile=True, post_album_art=False, wrapup_seconds=7,
         )
         self.assertEqual(len(status["dj_personas"]), 3)
         self.assertEqual(status["active_dj_persona"], "2")
         self.assertEqual(status["dj_prompt"], personas[1]["prompt"])
         self.assertTrue(status["mix_dj_with_profile"])
         self.assertFalse(status["post_album_art"])
+        self.assertEqual(status["dj_wrapup_seconds"], 7)
 
         restored = SpotifyAddon(SimpleNamespace(
             data_dir=Path(self.directory.name), emit_event=Mock(),
@@ -55,6 +58,7 @@ class SpotifyDjPersonaTests(unittest.TestCase):
         self.assertEqual(restored["active_dj_persona"], "2")
         self.assertTrue(restored["mix_dj_with_profile"])
         self.assertFalse(restored["post_album_art"])
+        self.assertEqual(restored["dj_wrapup_seconds"], 7)
 
     def test_legacy_prompt_migrates_to_first_persona(self):
         legacy = "Introduce {next_song} by {next_artist} in a dry voice."
@@ -67,6 +71,39 @@ class SpotifyDjPersonaTests(unittest.TestCase):
         self.assertEqual(migrated["dj_personas"][0]["prompt"], legacy)
         self.assertEqual(len(migrated["dj_personas"]), 3)
         self.assertTrue(migrated["post_album_art"])
+        self.assertEqual(migrated["dj_wrapup_seconds"], 20)
+
+    def test_wrapup_timing_accepts_end_of_track_and_rejects_out_of_range(self):
+        self.addon.configure_dj_mode(
+            True, personas=[
+                {"name": "Classic", "prompt": DEFAULT_DJ_PROMPT},
+                {"name": "Two", "prompt": "Short."},
+                {"name": "Three", "prompt": "Short."},
+            ], active_persona="1", wrapup_seconds=0,
+        )
+        self.addon._access_token = "token"
+        self.addon._token_expires_at = time.time() + 300
+        current = {
+            "is_playing": True,
+            "progress_ms": 99_400,
+            "item": {
+                "uri": "spotify:track:old", "name": "Old Song", "duration_ms": 100_000,
+                "artists": [{"name": "Old Artist"}], "album": {},
+            },
+        }
+        upcoming = {"queue": [{
+            "uri": "spotify:track:new", "name": "New Song", "duration_ms": 180_000,
+            "artists": [{"name": "New Artist"}], "album": {}, "external_urls": {},
+        }]}
+        self.addon._api_request = Mock(side_effect=[current, upcoming])
+
+        self.addon.check_playback_change()
+
+        self.assertIn("outgoing song is ending now", self.emit_event.call_args.args[0])
+        with self.assertRaisesRegex(SpotifyError, "0 to 25"):
+            self.addon.configure_dj_mode(
+                True, personas=self.addon.status()["dj_personas"], wrapup_seconds=26,
+            )
 
     def test_transition_blends_profile_and_can_omit_album_art(self):
         self.addon.configure_dj_mode(
