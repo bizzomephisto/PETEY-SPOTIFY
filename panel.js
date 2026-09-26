@@ -610,6 +610,7 @@
 
   if (typeof window.peteyInterface?.registerPanel === 'function') {
     window.peteyInterface.registerPanel({
+      addonId: 'spotify',
       id: 'spotify-now-playing',
       title: 'Now playing',
       icon: '♫',
